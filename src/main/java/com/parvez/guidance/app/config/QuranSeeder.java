@@ -12,7 +12,9 @@ import org.springframework.stereotype.Component;
 import java.io.*;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
+import java.util.stream.Stream;
 
 @Component
 @RequiredArgsConstructor
@@ -37,34 +39,37 @@ public class QuranSeeder implements CommandLineRunner {
                 BufferedReader arabicReader = new BufferedReader(new InputStreamReader(arabicRes.getInputStream()));
                 BufferedReader englishReader = new BufferedReader(new InputStreamReader(englishRes.getInputStream()));
                 BufferedReader bengaliReader = new BufferedReader(new InputStreamReader(bengaliRes.getInputStream()));
-        ) {
-            List<Quran> quranList = new ArrayList<>();
-            String arabicLine, englishLine, bengaliLine;
 
-            while ((arabicLine = arabicReader.readLine()) != null &&
-                    (englishLine = englishReader.readLine()) != null &&
-                    (bengaliLine = bengaliReader.readLine()) != null) {
+                Stream<String> arabicLines = arabicReader.lines();
+                Stream<String> englishLines = englishReader.lines();
+                Stream<String> bengaliLines = bengaliReader.lines();
+        ) {
+
+            Iterator<String> arabicIt = arabicLines.iterator();
+            Iterator<String> englishIt = englishLines.iterator();
+            Iterator<String> bengaliIt = bengaliLines.iterator();
+
+            List<Quran> quranList = new ArrayList<>();
+
+            while (arabicIt.hasNext() && englishIt.hasNext() && bengaliIt.hasNext()) {
+                String arabicLine = arabicIt.next().trim();
+                String englishLine = englishIt.next().trim();
+                String bengaliLine = bengaliIt.next().trim();
 
                 Quran q = parseQuranLine(arabicLine, englishLine, bengaliLine);
-
-                System.out.println("Quran: " + q);
-
-                if (q != null) {
-                    quranList.add(q);
-                }
+                if (q != null) quranList.add(q);
 
                 if (quranList.size() >= BATCH_SIZE) {
                     quranRepository.saveAll(quranList);
                     quranList.clear();
                 }
-
-                // Save remaining
-                if (!quranList.isEmpty()) {
-                    quranRepository.saveAll(quranList);
-                }
-
-                log.info("Finished seeding Quran data.");
             }
+            // Save leftover entries
+            if (!quranList.isEmpty()) {
+                quranRepository.saveAll(quranList);
+            }
+
+            log.info("Finished seeding Quran data.");
         }
     }
 
