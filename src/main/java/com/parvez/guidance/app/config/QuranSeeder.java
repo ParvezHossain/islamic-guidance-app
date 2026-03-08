@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 
 import java.io.*;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 @Component
@@ -37,66 +38,72 @@ public class QuranSeeder implements CommandLineRunner {
                 BufferedReader englishReader = new BufferedReader(new InputStreamReader(englishRes.getInputStream()));
                 BufferedReader bengaliReader = new BufferedReader(new InputStreamReader(bengaliRes.getInputStream()));
         ) {
-            String arabicLine;
-            String englishLine;
-            String bengaliLine;
             List<Quran> quranList = new ArrayList<>();
+            String arabicLine, englishLine, bengaliLine;
 
             while ((arabicLine = arabicReader.readLine()) != null &&
                     (englishLine = englishReader.readLine()) != null &&
                     (bengaliLine = bengaliReader.readLine()) != null) {
 
-                arabicLine = arabicLine.trim();
-                englishLine = englishLine.trim();
-                bengaliLine = bengaliLine.trim();
+                Quran q = parseQuranLine(arabicLine, englishLine, bengaliLine);
 
-                // Skip empty lines
-                if (arabicLine.isEmpty() || englishLine.isEmpty() || bengaliLine.isEmpty()) {
-                    continue;
+                System.out.println("Quran: " + q);
+
+                if (q != null) {
+                    quranList.add(q);
                 }
 
-                // Split lines into 3 parts: surah|ayah|text
-                String[] arabicParts = arabicLine.split("\\|", 3);
-                String[] englishParts = englishLine.split("\\|", 3);
-                String[] bengaliParts = bengaliLine.split("\\|", 3);
-
-                System.out.println("arabicParts" + arabicParts[0]);
-
-                // Skip malformed lines
-                if (arabicParts.length < 1 || englishParts.length < 3 || bengaliParts.length < 3) {
-                    log.warn("Skipping malformed line: arabic='{}', english='{}', bengali='{}'", arabicLine, englishLine, bengaliLine);
-                    continue;
-                }
-
-                int surah;
-                int ayah;
-                try {
-                    surah = Integer.parseInt(englishParts[0].trim());
-                    ayah = Integer.parseInt(englishParts[1].trim());
-                } catch (NumberFormatException e) {
-                    log.warn("Skipping line with invalid numbers: '{}'", arabicLine);
-                    continue;
-                }
-
-                Quran q = Quran.builder()
-                        .surahNumber(surah)
-                        .ayahNumber(ayah)
-                        .arabic(removeSlashes(arabicParts[0]))
-                        .english(englishParts[2])
-                        .bengali(bengaliParts[2])
-                        .build();
-
-                quranList.add(q);
-
-                if (quranList.size() >= 1000) {
+                if (quranList.size() >= BATCH_SIZE) {
                     quranRepository.saveAll(quranList);
                     quranList.clear();
                 }
+
+                // Save remaining
+                if (!quranList.isEmpty()) {
+                    quranRepository.saveAll(quranList);
+                }
+
+                log.info("Finished seeding Quran data.");
             }
         }
     }
 
-    private String removeSlashes(String str) {
+    private Quran parseQuranLine(String arabicLine, String englishLine, String bengaliLine) {
+        arabicLine = arabicLine.trim();
+        englishLine = englishLine.trim();
+        bengaliLine = bengaliLine.trim();
+
+        if (arabicLine.isEmpty() || englishLine.isEmpty() || bengaliLine.isEmpty()) return null;
+
+        String[] arabicParts = arabicLine.split("\\|", 3);
+        String[] englishParts = englishLine.split("\\|", 3);
+        String[] bengaliParts = bengaliLine.split("\\|", 3);
+
+        if (arabicParts.length < 1 || englishParts.length < 3 || bengaliParts.length < 3) {
+            log.warn("Skipping malformed line: {}, {}, {}", arabicLine, englishLine, bengaliLine);
+            return null;
+        }
+
+        int surah, ayah;
+        try {
+            surah = Integer.parseInt(englishParts[0].trim());
+            ayah = Integer.parseInt(englishParts[1].trim());
+        } catch (NumberFormatException e) {
+            log.warn("Skipping line with invalid numbers: {}", englishParts);
+            return null;
+        }
+
+        return Quran.builder()
+                .surahNumber(surah)
+                .ayahNumber(ayah)
+                .arabic(cleanText(arabicParts[0]))
+                .english(cleanText(englishParts[2]))
+                .bengali(cleanText(bengaliParts[2]))
+                .build();
+
+    }
+
+    private String cleanText(String str) {
         return str.trim()
                 .replaceAll("^\\[?\"*", "")   // remove starting [" or "
                 .replaceAll("\"?,?$", "");    // remove trailing ", or "
